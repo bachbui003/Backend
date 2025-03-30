@@ -16,9 +16,10 @@ public class JwtUtil {
 
     private final Key key = Keys.hmacShaKeyFor(SECRET_KEY.getBytes());
 
-    // 🔹 Tạo token chứa thêm role, phone, address, email, fullName
-    public String generateToken(String username, String role, String phone, String address, String email, String fullName) {
+    // 🔹 Tạo token chứa thêm userId, role, phone, address, email, fullName
+    public String generateToken(String username, Long userId, String role, String phone, String address, String email, String fullName) {
         Map<String, Object> claims = new HashMap<>();
+        claims.put("userId", userId); // Thêm userId vào payload
         claims.put("role", role);
         claims.put("fullName", fullName);
         claims.put("phone", phone);
@@ -38,31 +39,41 @@ public class JwtUtil {
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
     }
+
+    // 🔹 Lấy userId từ token
+    public Long extractUserId(String token) {
+        return extractClaim(token, claims -> claims.get("userId", Long.class));
+    }
+
     // 🔹 Lấy role từ token
     public String extractRole(String token) {
         return extractClaim(token, claims -> claims.get("role", String.class));
     }
+
     // 🔹 Lấy phone từ token
     public String extractPhone(String token) {
         return extractClaim(token, claims -> claims.get("phone", String.class));
     }
+
     // 🔹 Lấy address từ token
     public String extractAddress(String token) {
         return extractClaim(token, claims -> claims.get("address", String.class));
     }
+
     // 🔹 Lấy email từ token
     public String extractEmail(String token) {
         return extractClaim(token, claims -> claims.get("email", String.class));
+    }
+
+    // 🔹 Lấy fullName từ token
+    public String extractFullName(String token) {
+        return extractClaim(token, claims -> claims.get("fullName", String.class));
     }
 
     // 🔹 Lấy một claim từ token
     private <T> T extractClaim(String token, java.util.function.Function<Claims, T> claimsResolver) {
         final Claims claims = extractAllClaims(token);
         return claimsResolver.apply(claims);
-    }
-    // 🔹 Lấy fullName từ token
-    public String extractFullName(String token) {
-        return extractClaim(token, claims -> claims.get("fullName", String.class));
     }
 
     // 🔹 Lấy toàn bộ claims từ token
@@ -73,6 +84,7 @@ public class JwtUtil {
                 .parseClaimsJws(token)
                 .getBody();
     }
+
     // 🔹 Kiểm tra token hợp lệ
     public boolean validateToken(String token) {
         try {

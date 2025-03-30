@@ -18,6 +18,9 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Optional;
+
+
+
 @CrossOrigin(origins = "http://localhost:4200") // Cho phép Angular gọi API
 @RestController
 @RequestMapping("/api/auth")
@@ -60,7 +63,7 @@ public class AuthController {
             userRepository.save(user);
 
             logger.info("Người dùng {} đã đăng ký thành công với role {}", request.getUsername(), role);
-            return ResponseEntity.ok("Người dùng đăng ký thành công với role: " + role);
+            return ResponseEntity.ok("Đăng ký thành công");
 
         } catch (Exception e) {
             logger.error("Lỗi trong quá trình đăng ký người dùng: ", e);
@@ -90,7 +93,7 @@ public class AuthController {
             }
 
             // Thêm thông tin role, phone, address vào JWT
-            String token = jwtUtil.generateToken(user.getUsername(), user.getRole().name(), user.getPhone(), user.getAddress(), user.getEmail(), user.getFullName());
+            String token = jwtUtil.generateToken(user.getUsername(), user.getId(), user.getRole().name(), user.getPhone(), user.getAddress(), user.getEmail(), user.getFullName());
 
             logger.info("Người dùng {} đã đăng nhập thành công", request.getUsername());
             return ResponseEntity.ok(new AuthResponse(token, "Đăng nhập thành công"));

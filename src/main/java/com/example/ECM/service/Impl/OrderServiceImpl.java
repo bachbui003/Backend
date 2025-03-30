@@ -1,10 +1,7 @@
 package com.example.ECM.service.Impl;
 
 import com.example.ECM.model.*;
-import com.example.ECM.repository.CartRepository;
-import com.example.ECM.repository.CartItemRepository;
-import com.example.ECM.repository.OrderItemRepository;
-import com.example.ECM.repository.OrderRepository;
+import com.example.ECM.repository.*;
 import com.example.ECM.service.OrderService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -25,27 +22,37 @@ public class OrderServiceImpl implements OrderService {
     private final CartRepository cartRepository;
     private final CartItemRepository cartItemRepository;
     private final OrderItemRepository orderItemRepository;
+    private final ProductRepository productRepository; // Thêm ProductRepository để cập nhật số lượng sản phẩm
 
     @Autowired
     public OrderServiceImpl(OrderRepository orderRepository, CartRepository cartRepository,
-                            CartItemRepository cartItemRepository, OrderItemRepository orderItemRepository) {
+                            CartItemRepository cartItemRepository, OrderItemRepository orderItemRepository,
+                            ProductRepository productRepository) {
         this.orderRepository = orderRepository;
         this.cartRepository = cartRepository;
         this.cartItemRepository = cartItemRepository;
         this.orderItemRepository = orderItemRepository;
+        this.productRepository = productRepository;
     }
 
     @Override
-    public Order createOrder(Long userId) {
+    public Order createOrder(Long userId, List<Long> selectedCartItemIds) {
         logger.info("Bắt đầu tạo đơn hàng cho userId: " + userId);
 
+        // Lấy giỏ hàng của user
         Cart cart = cartRepository.findByUserId(userId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy giỏ hàng"));
 
-        if (cart.getCartItems().isEmpty()) {
-            throw new RuntimeException("Giỏ hàng trống, không thể đặt hàng!");
+        // Lọc ra danh sách sản phẩm được chọn
+        List<CartItem> selectedCartItems = cart.getCartItems().stream()
+                .filter(cartItem -> selectedCartItemIds.contains(cartItem.getId()))
+                .toList();
+
+        if (selectedCartItems.isEmpty()) {
+            throw new RuntimeException("Chưa chọn sản phẩm nào để đặt hàng!");
         }
 
+        // Tạo đơn hàng mới
         Order newOrder = new Order();
         newOrder.setUser(cart.getUser());
         newOrder.setStatus(OrderStatus.PENDING.name());
@@ -53,36 +60,45 @@ public class OrderServiceImpl implements OrderService {
         List<OrderItem> orderItems = new ArrayList<>();
         BigDecimal totalPrice = BigDecimal.ZERO;
 
-        for (CartItem cartItem : cart.getCartItems()) {
+        for (CartItem cartItem : selectedCartItems) {
+            Product product = cartItem.getProduct();
+            if (product.getStockQuantity() < cartItem.getQuantity()) {
+                throw new RuntimeException("Sản phẩm " + product.getName() + " không đủ hàng!");
+            }
+
             OrderItem orderItem = new OrderItem();
             orderItem.setOrder(newOrder);
-            orderItem.setProduct(cartItem.getProduct());
+            orderItem.setProduct(product);
             orderItem.setQuantity(cartItem.getQuantity());
-            orderItem.setPrice(BigDecimal.valueOf(cartItem.getProduct().getPrice())
-                    .multiply(BigDecimal.valueOf(cartItem.getQuantity())));
+            orderItem.setPrice(BigDecimal.valueOf(product.getPrice()).multiply(BigDecimal.valueOf(cartItem.getQuantity())));
             orderItems.add(orderItem);
             totalPrice = totalPrice.add(orderItem.getPrice());
+
+            // Giảm số lượng tồn kho
+            product.setStockQuantity(product.getStockQuantity() - cartItem.getQuantity());
+            productRepository.save(product);
         }
 
         newOrder.setTotalPrice(totalPrice);
         newOrder.setOrderItems(orderItems);
         Order savedOrder = orderRepository.save(newOrder);
 
-        // Xóa toàn bộ sản phẩm trong giỏ hàng
-        cartItemRepository.deleteAll(cart.getCartItems());
-        logger.info("Đã xóa sản phẩm trong giỏ hàng sau khi đặt hàng.");
+        // Xóa các sản phẩm đã chọn khỏi giỏ hàng
+        cartItemRepository.deleteAll(selectedCartItems);
+        logger.info("Đã xóa sản phẩm đã chọn trong giỏ hàng sau khi đặt hàng.");
 
-        // Xóa giỏ hàng luôn
-        cartRepository.delete(cart);
-        logger.info("Đã xóa giỏ hàng sau khi đặt hàng.");
+        // Nếu giỏ hàng trống thì xóa luôn
+        if (cart.getCartItems().isEmpty()) {
+            cartRepository.delete(cart);
+            logger.info("Đã xóa giỏ hàng vì không còn sản phẩm.");
+        }
 
         return savedOrder;
     }
 
-
     @Override
     public Order getOrderById(Long id) {
-        return orderRepository.findById(id).orElseThrow(() -> new RuntimeException("Order not found"));
+        return orderRepository.findById(id).orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng"));
     }
 
     @Override
@@ -108,7 +124,7 @@ public class OrderServiceImpl implements OrderService {
                 order.getOrderItems().add(item);
             }
             return orderRepository.save(order);
-        }).orElseThrow(() -> new RuntimeException("Order not found"));
+        }).orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng"));
     }
 
     @Override
@@ -122,13 +138,8 @@ public class OrderServiceImpl implements OrderService {
     @Override
     public void deleteOrder(Long id) {
         if (!orderRepository.existsById(id)) {
-            throw new RuntimeException("Order not found");
+            throw new RuntimeException("Không tìm thấy đơn hàng");
         }
         orderRepository.deleteById(id);
-    }
-
-    @Override
-    public Order saveOrder(Order order) {
-        return null;
     }
 }

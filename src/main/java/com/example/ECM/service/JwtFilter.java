@@ -6,6 +6,8 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -15,11 +17,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.List;
 
 @Component
 @RequiredArgsConstructor
 public class JwtFilter extends OncePerRequestFilter {
+    private static final Logger logger = LoggerFactory.getLogger(JwtFilter.class);
     private final JwtUtil jwtUtil;
     private final UserDetailsService userDetailsService;
 
@@ -40,11 +42,12 @@ public class JwtFilter extends OncePerRequestFilter {
             String address = jwtUtil.extractAddress(token);
             String email = jwtUtil.extractEmail(token);
             String fullName = jwtUtil.extractFullName(token);
+            Long userId = jwtUtil.extractUserId(token); // Lấy userId từ token
 
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UserDetails userDetails = userDetailsService.loadUserByUsername(username);
                 if (jwtUtil.validateToken(token)) {
-                    // Tạo Authentication token có thêm thông tin role, phone, address, email, fullName
+                    // Tạo Authentication token
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                             userDetails, null, userDetails.getAuthorities()
                     );
@@ -53,6 +56,7 @@ public class JwtFilter extends OncePerRequestFilter {
                     SecurityContextHolder.getContext().setAuthentication(authToken);
 
                     // Gán thông tin bổ sung vào request để sử dụng sau này
+                    request.setAttribute("userId", userId); // Gán userId
                     request.setAttribute("role", role);
                     request.setAttribute("phone", phone);
                     request.setAttribute("address", address);
@@ -68,5 +72,4 @@ public class JwtFilter extends OncePerRequestFilter {
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Lỗi xác thực token");
         }
     }
-
 }

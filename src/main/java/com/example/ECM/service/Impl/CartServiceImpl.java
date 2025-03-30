@@ -81,12 +81,14 @@ public class CartServiceImpl implements CartService {
             if (existingItem.isPresent()) {
                 CartItem cartItem = existingItem.get();
                 cartItem.updateQuantity(cartItem.getQuantity() + quantity);
+                cartItemRepository.save(cartItem);
             } else {
                 CartItem newItem = new CartItem(cart, product, quantity);
                 cart.addItem(newItem);
                 cartItemRepository.save(newItem);
             }
 
+            cartRepository.save(cart);
             return convertToDTO(cart);
         } catch (Exception e) {
             logger.error("Lỗi khi thêm sản phẩm vào giỏ hàng: {}", e.getMessage(), e);
@@ -107,6 +109,7 @@ public class CartServiceImpl implements CartService {
 
             cartItem.updateQuantity(quantity);
             cartItemRepository.save(cartItem);
+            cartRepository.save(cart);
             return convertToDTO(cart);
         } catch (Exception e) {
             logger.error("Lỗi khi cập nhật sản phẩm trong giỏ hàng: {}", e.getMessage(), e);
@@ -127,6 +130,7 @@ public class CartServiceImpl implements CartService {
 
             cart.removeItem(cartItem);
             cartItemRepository.delete(cartItem);
+            cartRepository.save(cart);
         } catch (Exception e) {
             logger.error("Lỗi khi xóa sản phẩm khỏi giỏ hàng: {}", e.getMessage(), e);
             throw new RuntimeException("Lỗi khi xóa sản phẩm khỏi giỏ hàng: " + e.getMessage());
@@ -149,23 +153,57 @@ public class CartServiceImpl implements CartService {
         }
     }
 
+    @Override
+    @Transactional
+    public void removeSelectedItems(Long userId, List<Long> selectedIds) {
+        logger.debug("Xóa các sản phẩm đã chọn khỏi giỏ hàng - userId: {}, selectedIds: {}", userId, selectedIds);
+        try {
+            Cart cart = cartRepository.findByUserId(userId)
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy giỏ hàng cho user ID: " + userId));
+
+            List<CartItem> itemsToRemove = cart.getCartItems().stream()
+                    .filter(item -> selectedIds.contains(item.getId()))
+                    .collect(Collectors.toList());
+
+            if (itemsToRemove.isEmpty()) {
+                logger.warn("Không tìm thấy sản phẩm nào trong danh sách selectedIds: {}", selectedIds);
+                return;
+            }
+
+            for (CartItem item : itemsToRemove) {
+                cart.removeItem(item);
+                cartItemRepository.delete(item);
+            }
+
+            cartRepository.save(cart);
+            logger.info("Đã xóa {} sản phẩm khỏi giỏ hàng của userId: {}", itemsToRemove.size(), userId);
+        } catch (Exception e) {
+            logger.error("Lỗi khi xóa các sản phẩm đã chọn khỏi giỏ hàng: {}", e.getMessage(), e);
+            throw new RuntimeException("Lỗi khi xóa các sản phẩm đã chọn: " + e.getMessage());
+        }
+    }
+
     private CartDTO convertToDTO(Cart cart) {
         List<CartItemDTO> cartItemDTOs = cart.getCartItems().stream()
-                .map(item -> new CartItemDTO(
-                        item.getId(),
-                        new ProductDTO(
-                                item.getProduct().getId(),
-                                item.getProduct().getName(),
-                                item.getProduct().getDescription(),
-                                item.getProduct().getPrice(),
-                                item.getProduct().getStockQuantity(),
-                                item.getProduct().getImageUrl(),
-                                item.getProduct().getRating(),
-                                item.getProduct().getCategory().getId()
-                        ),
-                        item.getQuantity(),
-                        item.getQuantity() * item.getProduct().getPrice() // ✅ Tính tổng tiền cho từng sản phẩm
-                ))
+                .map(item -> {
+                    Product product = item.getProduct();
+                    double itemPrice = item.getQuantity() * product.getPrice();
+                    return new CartItemDTO(
+                            item.getId(),
+                            new ProductDTO(
+                                    product.getId(),
+                                    product.getName(),
+                                    product.getDescription(),
+                                    product.getPrice(),
+                                    product.getStockQuantity(),
+                                    product.getImageUrl(),
+                                    product.getRating(),
+                                    product.getCategory() != null ? product.getCategory().getId() : null
+                            ),
+                            item.getQuantity(),
+                            itemPrice
+                    );
+                })
                 .collect(Collectors.toList());
 
         double totalPrice = cartItemDTOs.stream()
@@ -179,5 +217,4 @@ public class CartServiceImpl implements CartService {
                 totalPrice
         );
     }
-
 }

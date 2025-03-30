@@ -21,6 +21,8 @@ public class Category {
 
     private String name;
 
+    private String icon; // Lưu đường dẫn ảnh hoặc class icon
+
     @OneToMany(mappedBy = "category", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JsonIgnoreProperties("category") // Tránh lặp vô hạn với Product
     private List<Product> products = new ArrayList<>(); // Không để null, tránh lỗi khi serialize

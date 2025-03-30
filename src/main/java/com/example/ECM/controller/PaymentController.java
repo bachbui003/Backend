@@ -2,15 +2,16 @@ package com.example.ECM.controller;
 
 import com.example.ECM.model.Order;
 import com.example.ECM.model.Payment;
-import com.example.ECM.model.PaymentStatus;  // Import enum PaymentStatus
+import com.example.ECM.model.PaymentStatus;
 import com.example.ECM.service.OrderService;
 import com.example.ECM.service.PaymentService;
 import com.example.ECM.service.Impl.VNPayService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
-@CrossOrigin(origins = "http://localhost:4200") // Cho phép Angular gọi API
+
 @RestController
 @RequestMapping("/api/payment")
 public class PaymentController {
@@ -26,35 +27,50 @@ public class PaymentController {
 
     @PostMapping("/create/{orderId}")
     public String createPayment(@PathVariable Long orderId) {
-        // Lấy thông tin đơn hàng từ ID
         Order order = orderService.getOrderById(orderId);
-
-        // Tạo Payment cho đơn hàng
         Payment payment = paymentService.createPayment(order);
-
-        // Chuyển đến trang VNPay sau khi tạo đơn hàng
         String returnUrl = "http://localhost:8080/api/payment/vnpay-return";
         return vnPayService.createOrder(order.getTotalPrice().intValue(), "Thanh toán đơn hàng", returnUrl);
     }
 
     @GetMapping("/vnpay-return")
-    public String paymentReturn(@RequestParam Map<String, String> params) {
-        // Lấy transactionId từ các tham số trả về từ VNPay
-        String transactionId = params.get("vnp_TxnRef");
+    public String paymentReturn(HttpServletRequest request, @RequestParam Map<String, String> params) {
+        System.out.println("Các tham số trả về từ VNPay:");
+        params.forEach((key, value) -> System.out.println(key + ": " + value));
+        System.out.println("vnp_SecureHash: " + request.getParameter("vnp_SecureHash"));
+        System.out.println("vnp_ResponseCode: " + request.getParameter("vnp_ResponseCode"));
+        System.out.println("vnp_TransactionStatus: " + request.getParameter("vnp_TransactionStatus"));
 
-        // Kiểm tra kết quả thanh toán từ VNPay
-        int result = vnPayService.orderReturn(params);  // Truyền params vào phương thức
+        int result = vnPayService.orderReturn(request);
+        System.out.println("Kết quả kiểm tra giao dịch: " + result);
 
-        // Cập nhật trạng thái thanh toán dựa vào kết quả
         if (result == 1) {
-            // Thanh toán thành công
-            paymentService.updatePaymentStatus(transactionId, PaymentStatus.SUCCESS.name());
-            return "Thanh toán thành công";
+            String transactionId = params.get("vnp_TxnRef");
+            String vnpTransactionId = params.get("vnp_TransactionNo");
+            String vnpTransactionStatus = request.getParameter("vnp_TransactionStatus");
+            Long vnpAmount = Long.valueOf(params.get("vnp_Amount"));
+
+            // Cập nhật trạng thái thanh toán thành SUCCESS
+            paymentService.updatePaymentStatus(transactionId, PaymentStatus.SUCCESS, vnpTransactionStatus, vnpTransactionId, vnpAmount);
+            System.out.println("Cập nhật trạng thái thanh toán: " + PaymentStatus.SUCCESS);
+
+            // Lấy thông tin payment từ database
+            Payment payment = paymentService.getPaymentByTransactionId(transactionId);
+            if (payment != null) {
+                payment.setVnpTransactionId(vnpTransactionId); // Lưu vnpTransactionId
+                paymentService.savePayment(payment); // Lưu vào DB
+
+                // Xóa đơn hàng nếu thanh toán thành công
+                Long orderId = payment.getOrder().getId();
+                System.out.println("Xóa đơn hàng có ID: " + orderId);
+                orderService.deleteOrder(orderId); // Xóa đơn hàng
+            }
+            return "Thanh toán thành công và đơn hàng đã bị xóa";
         } else {
-            // Thanh toán thất bại
-            paymentService.updatePaymentStatus(transactionId, PaymentStatus.FAILED.name());
+            // Cập nhật trạng thái thanh toán thành FAILED
+            paymentService.updatePaymentStatus(params.get("vnp_TxnRef"), PaymentStatus.FAILED, null, null, 0L);
+            System.out.println("Cập nhật trạng thái thanh toán: " + PaymentStatus.FAILED);
             return "Thanh toán thất bại";
         }
     }
-
 }

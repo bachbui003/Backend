@@ -11,5 +11,7 @@ public interface CartService {
     void removeCartItem(Long userId, Long productId);
     void clearCart(Long userId);
     List<CartDTO> getAllCarts();
-
+    void removeSelectedItems(Long userId, List<Long> selectedIds); // Thêm phương thức mới
 }
+
+

@@ -72,7 +72,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/api/products/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/user/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/user/**").hasRole("ADMIN")
-                        .requestMatchers("/api/cart/**").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers("/api/cart/**").authenticated()
+                        .requestMatchers("/api/cart/add").authenticated()
                         .requestMatchers("/api/cart/all").hasRole("ADMIN")
                         .requestMatchers("/api/v1/payments/submitOrder").hasAnyRole("USER", "ADMIN")
                         // ✅ Cho phép USER & ADMIN truy cập API đặt hàng

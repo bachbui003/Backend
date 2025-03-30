@@ -112,6 +112,17 @@ public ResponseEntity<?> getAllCarts() {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Lỗi hệ thống: " + e.getMessage());
         }
     }
+    // Xóa các sản phẩm đã chọn khỏi giỏ hàng
+    @DeleteMapping("/remove-selected")
+    public ResponseEntity<CartDTO> removeSelectedItems(@RequestBody Map<String, Object> request) {
+        logger.debug("Gọi API xóa các sản phẩm đã chọn: {}", request);
+        Long userId = Long.valueOf(request.get("userId").toString());
+        List<Long> selectedIds = (List<Long>) request.get("selectedIds");
+
+        cartService.removeSelectedItems(userId, selectedIds);
+        CartDTO cartDTO = cartService.getCartByUserId(userId);
+        return ResponseEntity.ok(cartDTO);
+    }
 
     @DeleteMapping("/remove")
     public ResponseEntity<?> removeCartItem(

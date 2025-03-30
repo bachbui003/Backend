@@ -18,6 +18,10 @@ public class CategoryDTO {
     @Size(max = 50, message = "Category name should not exceed 50 characters")
     private String name;
 
+    @Size(max = 255, message = "Icon URL should not exceed 255 characters")
+    private String icon; // Lưu đường dẫn ảnh hoặc class icon
+
+
     @Builder.Default
     private List<ProductDTO> products = new ArrayList<>();  // Thêm danh sách sản phẩm
 }
