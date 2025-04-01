@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime; // Thêm import cho LocalDateTime
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
@@ -22,7 +23,7 @@ public class OrderServiceImpl implements OrderService {
     private final CartRepository cartRepository;
     private final CartItemRepository cartItemRepository;
     private final OrderItemRepository orderItemRepository;
-    private final ProductRepository productRepository; // Thêm ProductRepository để cập nhật số lượng sản phẩm
+    private final ProductRepository productRepository;
 
     @Autowired
     public OrderServiceImpl(OrderRepository orderRepository, CartRepository cartRepository,
@@ -55,6 +56,7 @@ public class OrderServiceImpl implements OrderService {
         // Tạo đơn hàng mới
         Order newOrder = new Order();
         newOrder.setUser(cart.getUser());
+        newOrder.setOrderDate(LocalDateTime.now()); // Thiết lập orderDate
         newOrder.setStatus(OrderStatus.PENDING.name());
 
         List<OrderItem> orderItems = new ArrayList<>();

@@ -4,7 +4,7 @@ import com.example.ECM.dto.OrderItemDTO;
 import com.example.ECM.dto.OrderResponseDTO;
 import com.example.ECM.model.Order;
 import com.example.ECM.service.OrderService;
-import com.example.ECM.service.CartService; // Thêm import cho CartService
+import com.example.ECM.service.CartService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,19 +14,19 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
-@CrossOrigin(origins = "http://localhost:4200") // Cho phép Angular gọi API
+@CrossOrigin(origins = "http://localhost:4200")
 @RestController
-@RequestMapping("/api/orders") // Endpoint chính của Order
+@RequestMapping("/api/orders")
 public class OrderController {
 
     private static final Logger logger = Logger.getLogger(OrderController.class.getName());
 
     private final OrderService orderService;
-    private final CartService cartService; // Thêm CartService
+    private final CartService cartService;
 
     public OrderController(OrderService orderService, CartService cartService) {
         this.orderService = orderService;
-        this.cartService = cartService; // Inject CartService qua constructor
+        this.cartService = cartService;
     }
 
     @PostMapping("/checkout/{userId}")
@@ -35,15 +35,13 @@ public class OrderController {
             @RequestBody List<Long> selectedCartItemIds) {
         logger.info("📢 [CHECKOUT] Tạo đơn hàng cho userId: " + userId + " với các cartItemIds: " + selectedCartItemIds);
         try {
-            // Tạo đơn hàng từ các sản phẩm đã chọn
             Order newOrder = orderService.createOrder(userId, selectedCartItemIds);
-            // Xóa các sản phẩm đã chọn khỏi giỏ hàng
             cartService.removeSelectedItems(userId, selectedCartItemIds);
             logger.info("✅ Đơn hàng đã tạo và các sản phẩm đã được xóa khỏi giỏ hàng: " + newOrder);
             return ResponseEntity.ok(convertToDTO(newOrder));
         } catch (Exception e) {
             logger.log(Level.SEVERE, "❌ Lỗi khi tạo đơn hàng hoặc xóa giỏ hàng cho userId: " + userId, e);
-            return ResponseEntity.badRequest().body(new OrderResponseDTO(null, null, null, null, "FAILED", null));
+            return ResponseEntity.badRequest().body(new OrderResponseDTO(null, null, null, null, "FAILED", null, null));
         }
     }
 
@@ -54,7 +52,7 @@ public class OrderController {
         logger.info("📢 [CREATE ORDER] Tạo đơn hàng cho userId: " + userId + " với các cartItemIds: " + selectedCartItemIds);
         try {
             Order order = orderService.createOrder(userId, selectedCartItemIds);
-            cartService.removeSelectedItems(userId, selectedCartItemIds); // Xóa sản phẩm khỏi giỏ hàng
+            cartService.removeSelectedItems(userId, selectedCartItemIds);
             logger.info("✅ Đơn hàng đã tạo: " + order);
             return ResponseEntity.ok(order);
         } catch (Exception e) {
@@ -63,7 +61,6 @@ public class OrderController {
         }
     }
 
-    // 📌 API lấy đơn hàng theo ID
     @GetMapping("/{id}")
     public ResponseEntity<?> getOrderById(@PathVariable Long id) {
         logger.info("📢 [GET ORDER] Lấy đơn hàng ID: " + id);
@@ -77,7 +74,6 @@ public class OrderController {
         }
     }
 
-    // 📌 API lấy danh sách đơn hàng của người dùng
     @GetMapping("/user/{userId}")
     public ResponseEntity<?> getOrdersByUserId(@PathVariable Long userId) {
         logger.info("📢 [GET USER ORDERS] Lấy đơn hàng của userId: " + userId);
@@ -91,7 +87,6 @@ public class OrderController {
         }
     }
 
-    // 📌 API lấy danh sách tất cả đơn hàng (admin)
     @GetMapping
     public ResponseEntity<?> getAllOrders() {
         logger.info("📢 [GET ALL ORDERS] Lấy tất cả đơn hàng");
@@ -105,7 +100,6 @@ public class OrderController {
         }
     }
 
-    // 📌 API cập nhật trạng thái đơn hàng
     @PutMapping("/{id}")
     public ResponseEntity<?> updateOrder(@PathVariable Long id, @RequestBody Order updatedOrder) {
         logger.info("📢 [UPDATE ORDER] Cập nhật đơn hàng ID: " + id + " với trạng thái mới: " + updatedOrder.getStatus());
@@ -119,7 +113,6 @@ public class OrderController {
         }
     }
 
-    // 📌 API xóa đơn hàng
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteOrder(@PathVariable Long id) {
         logger.info("📢 [DELETE ORDER] Xóa đơn hàng ID: " + id);
@@ -133,7 +126,6 @@ public class OrderController {
         }
     }
 
-    // 📌 Hàm chuyển đổi Order thành OrderResponseDTO
     private OrderResponseDTO convertToDTO(Order order) {
         if (order == null) {
             throw new RuntimeException("Đơn hàng không tồn tại.");
@@ -149,6 +141,7 @@ public class OrderController {
                 order.getUser().getEmail(),
                 order.getTotalPrice(),
                 order.getStatus(),
+                order.getOrderDate() != null ? order.getOrderDate().toString() : null,
                 order.getOrderItems().stream()
                         .map(item -> {
                             if (item.getProduct() == null) {

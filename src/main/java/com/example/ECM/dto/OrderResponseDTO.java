@@ -14,5 +14,6 @@ public class OrderResponseDTO {
     private String email;
     private BigDecimal totalPrice;
     private String status;
+    private String orderDate; // Thêm trường orderDate
     private List<OrderItemDTO> orderItems;
 }
