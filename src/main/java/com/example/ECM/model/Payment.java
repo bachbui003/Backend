@@ -2,6 +2,7 @@ package com.example.ECM.model;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -12,13 +13,14 @@ import java.time.LocalDateTime;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class Payment {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER) // Thay đổi từ LAZY -> EAGER vì Payment luôn gắn với Order
     @JoinColumn(name = "order_id", nullable = false)
     private Order order;
 
@@ -42,15 +44,21 @@ public class Payment {
     @Column(name = "vnp_transaction_no", length = 50)
     private String vnpTransactionNo;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-
     @Column(name = "vnp_transaction_id", length = 50)
     private String vnpTransactionId;
 
+    @Column(name = "vnp_tx_ref", length = 50)
+    private String vnpTxRef;
+
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
     @PrePersist
     protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
+        if (this.paymentDate == null) {
+            this.paymentDate = LocalDateTime.now();
+        }
     }
 
     public Long getOrderId() {

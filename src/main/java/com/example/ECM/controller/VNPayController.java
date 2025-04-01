@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
-
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/payments")
@@ -30,12 +30,14 @@ public class VNPayController {
             HttpServletRequest request) {
 
         try {
-            String baseUrl = request.getScheme() + "://" + request.getServerName() + ":" + request.getServerPort();
-            String vnpayUrl = vnPayService.createOrder(orderTotal, orderInfo, baseUrl);
+            String baseUrl = request.getScheme() + "://" + request.getServerName() + ":" + request.getServerPort() + "/api/v1/payments/vnpay-payment";
+            String transactionId = UUID.randomUUID().toString(); // Tạo transactionId
+            String vnpayUrl = vnPayService.createOrder(orderTotal, orderInfo, baseUrl, transactionId); // Truyền transactionId làm txnRef
 
             // ✅ Trả về URL để test trên Postman
             Map<String, String> response = new HashMap<>();
             response.put("paymentUrl", vnpayUrl);
+            response.put("transactionId", transactionId); // Trả thêm transactionId để client có thể lưu nếu cần
 
             return ResponseEntity.ok(response);
 
@@ -62,9 +64,10 @@ public class VNPayController {
             String transactionId = request.getParameter("vnp_TransactionNo");
             String totalAmount = request.getParameter("vnp_Amount");
             String paymentTime = request.getParameter("vnp_PayDate");
+            String vnpTxnRef = request.getParameter("vnp_TxnRef"); // Lấy vnp_TxnRef để đồng bộ với Payment
 
             // Kiểm tra nếu các tham số quan trọng bị thiếu
-            if (orderInfo == null || transactionId == null || totalAmount == null || paymentTime == null) {
+            if (orderInfo == null || transactionId == null || totalAmount == null || paymentTime == null || vnpTxnRef == null) {
                 throw new IllegalArgumentException("Missing parameters in the callback");
             }
 
@@ -72,13 +75,17 @@ public class VNPayController {
             int paymentStatus = vnPayService.orderReturn(request);
             String status = (paymentStatus == 1) ? "SUCCESS" : "FAILED";
 
+            // Cập nhật trạng thái thanh toán nếu cần
+            // Ví dụ: paymentService.updatePaymentStatusFromVNPay(vnpTxnRef, responseCode, convertParamMap(paramMap));
+
             // Đảm bảo dữ liệu không bị thiếu hoặc sai
             Map<String, Object> response = new HashMap<>();
             response.put("status", status);
             response.put("orderId", orderInfo);
-            response.put("totalPrice", Long.parseLong(totalAmount) / 100);  // Đảm bảo giá trị chính xác (vì VNPay trả về giá trị theo đồng)
+            response.put("totalPrice", Long.parseLong(totalAmount) / 100); // Đảm bảo giá trị chính xác
             response.put("paymentTime", paymentTime);
             response.put("transactionId", transactionId);
+            response.put("vnpTxnRef", vnpTxnRef); // Thêm vnp_TxnRef vào response để dễ kiểm tra
 
             return ResponseEntity.ok(response);
 
@@ -89,5 +96,12 @@ public class VNPayController {
             System.err.println("Lỗi khi xử lý callback: " + e.getMessage());
             return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
         }
+    }
+
+    // Hàm phụ để chuyển đổi paramMap thành Map<String, String>
+    private Map<String, String> convertParamMap(Map<String, String[]> paramMap) {
+        Map<String, String> result = new HashMap<>();
+        paramMap.forEach((key, value) -> result.put(key, value[0]));
+        return result;
     }
 }

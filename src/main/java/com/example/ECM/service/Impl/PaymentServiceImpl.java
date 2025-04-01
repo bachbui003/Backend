@@ -1,10 +1,13 @@
 package com.example.ECM.service.Impl;
 
+import com.example.ECM.dto.PaymentDTO;
 import com.example.ECM.model.Order;
 import com.example.ECM.model.Payment;
 import com.example.ECM.model.PaymentStatus;
+import com.example.ECM.model.User;
 import com.example.ECM.repository.OrderRepository;
 import com.example.ECM.repository.PaymentRepository;
+import com.example.ECM.repository.UserRepository;
 import com.example.ECM.service.PaymentService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -14,8 +17,9 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -24,10 +28,10 @@ public class PaymentServiceImpl implements PaymentService {
     private static final Logger logger = LoggerFactory.getLogger(PaymentServiceImpl.class);
     private final PaymentRepository paymentRepository;
     private final OrderRepository orderRepository;
+    private final UserRepository userRepository;
 
     @Override
     public Payment createPayment(Order order) {
-        // 🔍 Kiểm tra xem đơn hàng đã có thanh toán thành công chưa
         Optional<Payment> existingPayment = paymentRepository.findByOrder(order);
         if (existingPayment.isPresent() && existingPayment.get().getPaymentStatus() == PaymentStatus.SUCCESS) {
             throw new RuntimeException("Đơn hàng đã được thanh toán. Không thể tạo thanh toán mới.");
@@ -37,18 +41,9 @@ public class PaymentServiceImpl implements PaymentService {
         payment.setOrder(order);
         payment.setUser(order.getUser());
         payment.setAmount(order.getTotalPrice());
-        payment.setTransactionId(UUID.randomUUID().toString());
-
-        // Xác định trạng thái thanh toán dựa vào số tiền của đơn hàng
-        if (order.getTotalPrice().compareTo(BigDecimal.ZERO) > 0) {
-            payment.setPaymentStatus(PaymentStatus.SUCCESS);
-            logger.info("✅ Payment initialized with SUCCESS status.");
-        } else {
-            payment.setPaymentStatus(PaymentStatus.FAILED);
-            logger.warn("❌ Payment initialized with FAILED status due to zero or negative amount.");
-        }
-
+        // Không tạo transactionId ngẫu nhiên ở đây nữa, sẽ được set từ client hoặc trước khi gửi VNPay
         payment.setPaymentDate(LocalDateTime.now());
+        payment.setPaymentStatus(PaymentStatus.PENDING);
 
         Payment savedPayment = paymentRepository.save(payment);
         logger.info("✅ Payment created: TransactionId = {}, Amount = {}, Status = {}",
@@ -56,51 +51,138 @@ public class PaymentServiceImpl implements PaymentService {
         return savedPayment;
     }
 
+    // Thêm phương thức để tạo Payment với transactionId từ client
+    public Payment createPaymentWithTransactionId(Order order, String transactionId) {
+        Optional<Payment> existingPayment = paymentRepository.findByOrder(order);
+        if (existingPayment.isPresent() && existingPayment.get().getPaymentStatus() == PaymentStatus.SUCCESS) {
+            throw new RuntimeException("Đơn hàng đã được thanh toán. Không thể tạo thanh toán mới.");
+        }
+
+        Payment payment = new Payment();
+        payment.setOrder(order);
+        payment.setUser(order.getUser());
+        payment.setAmount(order.getTotalPrice());
+        payment.setTransactionId(transactionId); // Sử dụng transactionId từ client hoặc trước khi gửi VNPay
+        payment.setPaymentDate(LocalDateTime.now());
+        payment.setPaymentStatus(PaymentStatus.PENDING);
+
+        Payment savedPayment = paymentRepository.save(payment);
+        logger.info("✅ Payment created with TransactionId: TransactionId = {}, Amount = {}, Status = {}",
+                savedPayment.getTransactionId(), savedPayment.getAmount(), savedPayment.getPaymentStatus());
+        return savedPayment;
+    }
 
     @Override
     @Transactional
-    public void updatePaymentStatus(String transactionId, PaymentStatus status, String vnpTransactionStatus, String vnpTxnRef, Long vnpAmount) {
-        logger.info("🔄 Cập nhật trạng thái thanh toán cho TransactionId: {}", transactionId);
+    public void updatePaymentStatus(PaymentDTO paymentDTO) {
+        logger.info("🔄 Đang cập nhật trạng thái thanh toán: TransactionId = {}", paymentDTO.getPaymentCode());
+
+        Payment payment = paymentRepository.findByTransactionId(paymentDTO.getPaymentCode())
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy giao dịch với mã: " + paymentDTO.getPaymentCode()));
+
+        if (payment.getPaymentStatus() == PaymentStatus.SUCCESS) {
+            logger.warn("⚠️ Giao dịch đã hoàn thành trước đó. Không thể cập nhật.");
+            throw new RuntimeException("Giao dịch này đã hoàn thành. Không thể cập nhật trạng thái.");
+        }
+
+        logger.info("🔍 Trạng thái nhận từ DTO: {}", paymentDTO.getPaymentStatus());
+
+        // Sử dụng trực tiếp paymentDTO.getPaymentStatus() thay vì so sánh lại với "00"
+        PaymentStatus newStatus = paymentDTO.getPaymentStatus();
+        if (newStatus == null) {
+            logger.error("⚠️ PaymentStatus từ DTO là null. Gán mặc định là FAILED.");
+            newStatus = PaymentStatus.FAILED; // Gán mặc định nếu null
+        }
+        payment.setPaymentStatus(newStatus);
+
+        // Gán các trường VNPay và kiểm tra null
+        payment.setVnpTxRef(paymentDTO.getVnpTxRef() != null ? paymentDTO.getVnpTxRef() : "N/A");
+        payment.setVnpTransactionId(paymentDTO.getVnpTransactionId() != null ? paymentDTO.getVnpTransactionId() : "N/A");
+        payment.setVnpTransactionNo(paymentDTO.getVnpTransactionNo() != null ? paymentDTO.getVnpTransactionNo() : "N/A");
+
+        BigDecimal amount = paymentDTO.getAmount();
+        if (amount == null) {
+            amount = payment.getAmount() != null ? payment.getAmount() : payment.getOrder().getTotalPrice();
+            if (amount == null) {
+                throw new IllegalStateException("Amount không thể null cho giao dịch: " + paymentDTO.getPaymentCode());
+            }
+        }
+        payment.setAmount(amount);
+
+        payment.setPaymentDate(paymentDTO.getPaymentDate() != null ? paymentDTO.getPaymentDate() : LocalDateTime.now());
+
+        paymentRepository.save(payment);
+        logger.info("✅ Payment cập nhật: TransactionId = {}, Amount = {}, Status = {}, VnpTxRef = {}, VnpTransactionId = {}, VnpTransactionNo = {}",
+                payment.getTransactionId(), payment.getAmount(), payment.getPaymentStatus(),
+                payment.getVnpTxRef(), payment.getVnpTransactionId(), payment.getVnpTransactionNo());
+
+        if (newStatus == PaymentStatus.SUCCESS) {
+            markOrderAsPaid(payment.getOrder());
+        }
+
+    }
+
+    @Transactional
+    public void updatePaymentStatusFromVNPay(String transactionId, String vnpayStatus, Map<String, String> vnpayParams) {
+        logger.info("🔄 Đang cập nhật trạng thái thanh toán từ VNPay: TransactionId = {}", transactionId);
 
         Payment payment = paymentRepository.findByTransactionId(transactionId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy giao dịch với mã: " + transactionId));
 
-        // 🔥 Ngăn chặn cập nhật nếu đã thành công trước đó
         if (payment.getPaymentStatus() == PaymentStatus.SUCCESS) {
-            logger.warn("⚠️ Payment đã được thanh toán trước đó. Không thể cập nhật.");
+            logger.warn("⚠️ Giao dịch đã hoàn thành trước đó. Không thể cập nhật.");
             throw new RuntimeException("Giao dịch này đã hoàn thành. Không thể cập nhật trạng thái.");
         }
 
-        logger.info("📩 Phản hồi từ VNPay - Trạng thái: {}, Mã giao dịch: {}, Số tiền: {}", vnpTransactionStatus, vnpTxnRef, vnpAmount);
+        PaymentStatus newStatus = "00".equals(vnpayStatus) ? PaymentStatus.SUCCESS : PaymentStatus.FAILED;
+        payment.setPaymentStatus(newStatus);
+        payment.setVnpTxRef(vnpayParams.get("vnp_TxnRef"));
+        payment.setVnpTransactionId(vnpayParams.get("vnp_TransactionId"));
+        payment.setVnpTransactionNo(vnpayParams.get("vnp_TransactionNo"));
 
-        // Xác định trạng thái mới của thanh toán dựa vào phản hồi từ VNPay
-        PaymentStatus newStatus = "00".equals(vnpTransactionStatus) ? PaymentStatus.SUCCESS : PaymentStatus.FAILED;
-
-        // Cập nhật trạng thái nếu có thay đổi
-        if (payment.getPaymentStatus() != newStatus) {
-            payment.setPaymentStatus(newStatus);
-            logger.info("✅ Cập nhật trạng thái thanh toán thành công: {}", newStatus);
+        String vnpAmountStr = vnpayParams.get("vnp_Amount");
+        if (vnpAmountStr != null && !vnpAmountStr.isEmpty()) {
+            BigDecimal amount = new BigDecimal(vnpAmountStr).divide(new BigDecimal("100"));
+            payment.setAmount(amount);
+        } else {
+            BigDecimal existingAmount = payment.getAmount();
+            if (existingAmount == null) {
+                BigDecimal orderAmount = payment.getOrder().getTotalPrice();
+                if (orderAmount == null) {
+                    throw new IllegalStateException("Amount không thể null cho giao dịch: " + transactionId);
+                }
+                payment.setAmount(orderAmount);
+            }
         }
 
-        // Cập nhật thông tin giao dịch từ VNPay
-        payment.setVnpTransactionNo(vnpTxnRef);
-        payment.setAmount(BigDecimal.valueOf(vnpAmount).divide(BigDecimal.valueOf(100))); // Chuyển về VNĐ
-        paymentRepository.save(payment);
-        logger.info("💾 Đã cập nhật Payment thành công với TransactionId: {}", transactionId);
+        String vnpPayDate = vnpayParams.get("vnp_PayDate");
+        payment.setPaymentDate(vnpPayDate != null ? parseVNPayDate(vnpPayDate) : LocalDateTime.now());
 
-        // Nếu thanh toán thành công, cập nhật trạng thái đơn hàng
+        paymentRepository.save(payment);
+        logger.info("✅ Payment cập nhật từ VNPay: TransactionId = {}, Amount = {}, Status = {}",
+                payment.getTransactionId(), payment.getAmount(), payment.getPaymentStatus());
+
         if (newStatus == PaymentStatus.SUCCESS) {
-            markOrderAsPaid(payment);
+            markOrderAsPaid(payment.getOrder());
+        }
+    }
+
+    private LocalDateTime parseVNPayDate(String vnpPayDate) {
+        try {
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+            return LocalDateTime.parse(vnpPayDate, formatter);
+        } catch (Exception e) {
+            logger.warn("⚠️ Không thể parse vnp_PayDate: {}, sử dụng thời gian hiện tại", vnpPayDate);
+            return LocalDateTime.now();
         }
     }
 
     @Transactional
-    protected void markOrderAsPaid(Payment payment) {
-        Order order = payment.getOrder();
+    protected void markOrderAsPaid(Order order) {
         if (order != null) {
-            order.setStatus("PAID");  // Cập nhật trạng thái thay vì xóa
+            order.setStatus("PAID");
             orderRepository.save(order);
-            logger.info("✅ Đơn hàng đã được cập nhật trạng thái PAID: OrderId = {}", order.getId());
+            logger.info("✅ Đơn hàng cập nhật trạng thái PAID: OrderId = {}", order.getId());
         } else {
             logger.warn("⚠️ Không tìm thấy đơn hàng để cập nhật trạng thái!");
         }
@@ -109,7 +191,7 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     public Payment getPaymentByTransactionId(String transactionId) {
         return paymentRepository.findByTransactionId(transactionId)
-                .orElseThrow(() -> new RuntimeException("Payment not found for transactionId: " + transactionId));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy Payment với TransactionId: " + transactionId));
     }
 
     @Override

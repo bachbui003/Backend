@@ -1,5 +1,6 @@
 package com.example.ECM.controller;
 
+import com.example.ECM.dto.PaymentDTO;
 import com.example.ECM.model.Order;
 import com.example.ECM.model.Payment;
 import com.example.ECM.model.PaymentStatus;
@@ -10,7 +11,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/payment")
@@ -28,49 +32,64 @@ public class PaymentController {
     @PostMapping("/create/{orderId}")
     public String createPayment(@PathVariable Long orderId) {
         Order order = orderService.getOrderById(orderId);
-        Payment payment = paymentService.createPayment(order);
+        String transactionId = UUID.randomUUID().toString(); // Tạo transactionId trước
+        Payment payment = paymentService.createPaymentWithTransactionId(order, transactionId); // Sử dụng phương thức mới
         String returnUrl = "http://localhost:8080/api/payment/vnpay-return";
-        return vnPayService.createOrder(order.getTotalPrice().intValue(), "Thanh toán đơn hàng", returnUrl);
+
+        // Truyền transactionId làm vnp_TxnRef cho VNPay
+        return vnPayService.createOrder(order.getTotalPrice().intValue(), "Thanh toán đơn hàng", returnUrl, transactionId);
     }
 
     @GetMapping("/vnpay-return")
     public String paymentReturn(HttpServletRequest request, @RequestParam Map<String, String> params) {
-        System.out.println("Các tham số trả về từ VNPay:");
+        System.out.println("📌 Các tham số trả về từ VNPay:");
         params.forEach((key, value) -> System.out.println(key + ": " + value));
-        System.out.println("vnp_SecureHash: " + request.getParameter("vnp_SecureHash"));
-        System.out.println("vnp_ResponseCode: " + request.getParameter("vnp_ResponseCode"));
-        System.out.println("vnp_TransactionStatus: " + request.getParameter("vnp_TransactionStatus"));
 
         int result = vnPayService.orderReturn(request);
-        System.out.println("Kết quả kiểm tra giao dịch: " + result);
+        System.out.println("📌 Kết quả kiểm tra giao dịch: " + result);
 
-        if (result == 1) {
-            String transactionId = params.get("vnp_TxnRef");
-            String vnpTransactionId = params.get("vnp_TransactionNo");
-            String vnpTransactionStatus = request.getParameter("vnp_TransactionStatus");
-            Long vnpAmount = Long.valueOf(params.get("vnp_Amount"));
+        String transactionId = params.get("vnp_TxnRef");
+        String vnpResponseCode = params.get("vnp_ResponseCode");
+        BigDecimal vnpAmount = Optional.ofNullable(params.get("vnp_Amount"))
+                .map(value -> new BigDecimal(value).divide(new BigDecimal("100")))
+                .orElseThrow(() -> new IllegalStateException("vnp_Amount không được null từ VNPay"));
 
-            // Cập nhật trạng thái thanh toán thành SUCCESS
-            paymentService.updatePaymentStatus(transactionId, PaymentStatus.SUCCESS, vnpTransactionStatus, vnpTransactionId, vnpAmount);
-            System.out.println("Cập nhật trạng thái thanh toán: " + PaymentStatus.SUCCESS);
+        Payment payment = paymentService.getPaymentByTransactionId(transactionId);
+        if (payment != null) {
+            PaymentDTO paymentDTO = new PaymentDTO();
+            paymentDTO.setPaymentCode(transactionId);
+            paymentDTO.setOrderId(payment.getOrder().getId());
+            paymentDTO.setAmount(vnpAmount);
+            // Gán tất cả giá trị trước
+            paymentDTO.setVnpTransactionId(params.get("vnp_TransactionNo"));
+            paymentDTO.setVnpTransactionNo(params.get("vnp_TransactionNo"));
+            paymentDTO.setVnpTxRef(params.get("vnp_TxnRef"));
+            // Gán trực tiếp PaymentStatus
+            paymentDTO.setPaymentStatus("00".equals(vnpResponseCode) ? PaymentStatus.SUCCESS : PaymentStatus.FAILED);
 
-            // Lấy thông tin payment từ database
-            Payment payment = paymentService.getPaymentByTransactionId(transactionId);
-            if (payment != null) {
-                payment.setVnpTransactionId(vnpTransactionId); // Lưu vnpTransactionId
-                paymentService.savePayment(payment); // Lưu vào DB
+            paymentService.updatePaymentStatus(paymentDTO);
+            System.out.println("✅ Cập nhật trạng thái thanh toán: " + paymentDTO.getPaymentStatus());
 
-                // Xóa đơn hàng nếu thanh toán thành công
+            if (paymentDTO.getPaymentStatus() == PaymentStatus.SUCCESS) {
                 Long orderId = payment.getOrder().getId();
-                System.out.println("Xóa đơn hàng có ID: " + orderId);
-                orderService.deleteOrder(orderId); // Xóa đơn hàng
+                System.out.println("✅ Xóa đơn hàng có ID: " + orderId);
+                orderService.deleteOrder(orderId);
+                return "Thanh toán thành công và đơn hàng đã bị xóa";
             }
-            return "Thanh toán thành công và đơn hàng đã bị xóa";
         } else {
-            // Cập nhật trạng thái thanh toán thành FAILED
-            paymentService.updatePaymentStatus(params.get("vnp_TxnRef"), PaymentStatus.FAILED, null, null, 0L);
-            System.out.println("Cập nhật trạng thái thanh toán: " + PaymentStatus.FAILED);
-            return "Thanh toán thất bại";
+            System.out.println("⚠️ Không tìm thấy Payment với TransactionId: " + transactionId);
+            PaymentDTO failedPaymentDTO = new PaymentDTO();
+            failedPaymentDTO.setPaymentCode(transactionId);
+            failedPaymentDTO.setAmount(vnpAmount);
+            failedPaymentDTO.setPaymentStatus(PaymentStatus.FAILED);
+            // Gán giá trị mặc định nếu null
+            failedPaymentDTO.setVnpTransactionId(params.get("vnp_TransactionNo"));
+            failedPaymentDTO.setVnpTransactionNo(params.get("vnp_TransactionNo"));
+            failedPaymentDTO.setVnpTxRef(params.get("vnp_TxnRef"));
+            paymentService.updatePaymentStatus(failedPaymentDTO);
         }
+
+        System.out.println("⚠️ Cập nhật trạng thái thanh toán: FAILED");
+        return "Thanh toán thất bại";
     }
 }
