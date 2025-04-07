@@ -28,4 +28,5 @@ public class OrderItem {
 
     private int quantity;
     private BigDecimal price; // Giá tại thời điểm đặt hàng
+    private String imageUrl; // Thêm trường imageUrl
 }

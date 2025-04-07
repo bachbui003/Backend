@@ -1,6 +1,7 @@
 package com.example.ECM.controller;
 
 import com.example.ECM.dto.CategoryDTO;
+import com.example.ECM.dto.ProductDTO;
 import com.example.ECM.service.CategoryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,21 +23,18 @@ public class CategoryController {
         List<CategoryDTO> categories = categoryService.getAllCategories();
         return ResponseEntity.ok(categories);
     }
-
     @GetMapping("/{id}")
     public ResponseEntity<CategoryDTO> getCategoryById(@PathVariable Long id) {
         Optional<CategoryDTO> categoryDTO = categoryService.getCategoryById(id);
         return categoryDTO.map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
-
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping
     public ResponseEntity<CategoryDTO> createCategory(@Valid @RequestBody CategoryDTO categoryDTO) {
         CategoryDTO createdCategory = categoryService.createCategory(categoryDTO);
         return ResponseEntity.ok(createdCategory);
     }
-
     @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/{id}")
     public ResponseEntity<CategoryDTO> updateCategory(@PathVariable Long id, @Valid @RequestBody CategoryDTO updatedCategory) {
@@ -44,7 +42,6 @@ public class CategoryController {
         return updatedCategoryDTO.map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
-
     @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteCategory(@PathVariable Long id) {
@@ -52,5 +49,11 @@ public class CategoryController {
             return ResponseEntity.noContent().build();
         }
         return ResponseEntity.notFound().build();
+    }
+    @GetMapping("/{id}/products")
+    public ResponseEntity<List<ProductDTO>> getProductsByCategory(@PathVariable Long id) {
+        Optional<List<ProductDTO>> products = categoryService.getProductsByCategory(id);
+        return products.map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 }

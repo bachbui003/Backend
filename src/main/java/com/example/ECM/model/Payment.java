@@ -47,7 +47,7 @@ public class Payment {
     @Column(name = "vnp_transaction_id", length = 50)
     private String vnpTransactionId;
 
-    @Column(name = "vnp_tx_ref", length = 50)
+    @Column(name = "vnp_tx_ref", length = 50, nullable = true)
     private String vnpTxRef;
 
     @CreationTimestamp

@@ -72,16 +72,26 @@ public class ProductController {
     // 🔹 Thêm sản phẩm mới (chỉ admin)
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping
-    public ResponseEntity<ProductDTO> createProduct(@RequestBody ProductDTO productDTO) {
+    public ResponseEntity<List<ProductDTO>> createProduct(@RequestBody List<ProductDTO> productDTOs) {
         try {
-            // Kiểm tra nếu stockQuantity không có giá trị
-            if (productDTO.getStockQuantity() == null || productDTO.getStockQuantity() < 0) {
-                // Trả về lỗi nếu stockQuantity không hợp lệ
+            // Kiểm tra nếu danh sách rỗng
+            if (productDTOs == null || productDTOs.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(null);
             }
 
-            // Tiến hành tạo sản phẩm nếu stockQuantity hợp lệ
-            return ResponseEntity.status(HttpStatus.CREATED).body(productService.createProduct(productDTO));
+            // Kiểm tra stockQuantity cho từng sản phẩm
+            for (ProductDTO productDTO : productDTOs) {
+                if (productDTO.getStockQuantity() == null || productDTO.getStockQuantity() < 0) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(null);
+                }
+            }
+
+            // Tạo từng sản phẩm và thu thập kết quả
+            List<ProductDTO> createdProducts = productDTOs.stream()
+                    .map(productService::createProduct)
+                    .toList();
+
+            return ResponseEntity.status(HttpStatus.CREATED).body(createdProducts);
         } catch (Exception e) {
             logger.error("Lỗi khi thêm sản phẩm: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);

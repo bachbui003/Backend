@@ -41,7 +41,6 @@ public class PaymentServiceImpl implements PaymentService {
         payment.setOrder(order);
         payment.setUser(order.getUser());
         payment.setAmount(order.getTotalPrice());
-        // Không tạo transactionId ngẫu nhiên ở đây nữa, sẽ được set từ client hoặc trước khi gửi VNPay
         payment.setPaymentDate(LocalDateTime.now());
         payment.setPaymentStatus(PaymentStatus.PENDING);
 
@@ -51,7 +50,6 @@ public class PaymentServiceImpl implements PaymentService {
         return savedPayment;
     }
 
-    // Thêm phương thức để tạo Payment với transactionId từ client
     public Payment createPaymentWithTransactionId(Order order, String transactionId) {
         Optional<Payment> existingPayment = paymentRepository.findByOrder(order);
         if (existingPayment.isPresent() && existingPayment.get().getPaymentStatus() == PaymentStatus.SUCCESS) {
@@ -62,7 +60,7 @@ public class PaymentServiceImpl implements PaymentService {
         payment.setOrder(order);
         payment.setUser(order.getUser());
         payment.setAmount(order.getTotalPrice());
-        payment.setTransactionId(transactionId); // Sử dụng transactionId từ client hoặc trước khi gửi VNPay
+        payment.setTransactionId(transactionId);
         payment.setPaymentDate(LocalDateTime.now());
         payment.setPaymentStatus(PaymentStatus.PENDING);
 
@@ -87,15 +85,13 @@ public class PaymentServiceImpl implements PaymentService {
 
         logger.info("🔍 Trạng thái nhận từ DTO: {}", paymentDTO.getPaymentStatus());
 
-        // Sử dụng trực tiếp paymentDTO.getPaymentStatus() thay vì so sánh lại với "00"
         PaymentStatus newStatus = paymentDTO.getPaymentStatus();
         if (newStatus == null) {
             logger.error("⚠️ PaymentStatus từ DTO là null. Gán mặc định là FAILED.");
-            newStatus = PaymentStatus.FAILED; // Gán mặc định nếu null
+            newStatus = PaymentStatus.FAILED;
         }
         payment.setPaymentStatus(newStatus);
 
-        // Gán các trường VNPay và kiểm tra null
         payment.setVnpTxRef(paymentDTO.getVnpTxRef() != null ? paymentDTO.getVnpTxRef() : "N/A");
         payment.setVnpTransactionId(paymentDTO.getVnpTransactionId() != null ? paymentDTO.getVnpTransactionId() : "N/A");
         payment.setVnpTransactionNo(paymentDTO.getVnpTransactionNo() != null ? paymentDTO.getVnpTransactionNo() : "N/A");
@@ -119,7 +115,6 @@ public class PaymentServiceImpl implements PaymentService {
         if (newStatus == PaymentStatus.SUCCESS) {
             markOrderAsPaid(payment.getOrder());
         }
-
     }
 
     @Transactional
@@ -199,5 +194,37 @@ public class PaymentServiceImpl implements PaymentService {
     public void savePayment(Payment payment) {
         paymentRepository.save(payment);
         logger.info("💾 Payment saved: TransactionId = {}, Status = {}", payment.getTransactionId(), payment.getPaymentStatus());
+    }
+    //COD
+    @Transactional
+    public Payment createCODPayment(Order order) {
+        logger.info("📢 Bắt đầu tạo thanh toán COD cho đơn hàng: OrderId = {}", order.getId());
+
+        Optional<Payment> existingPayment = paymentRepository.findByOrder(order);
+        if (existingPayment.isPresent() && existingPayment.get().getPaymentStatus() == PaymentStatus.SUCCESS) {
+            throw new RuntimeException("Đơn hàng đã được thanh toán. Không thể tạo thanh toán COD.");
+        }
+
+        Payment payment = new Payment();
+        payment.setOrder(order);
+        payment.setUser(order.getUser());
+        payment.setAmount(order.getTotalPrice());
+        payment.setTransactionId("COD_" + order.getId() + "_" + System.currentTimeMillis());
+        payment.setPaymentDate(LocalDateTime.now());
+        payment.setPaymentStatus(PaymentStatus.SUCCESS); // Thanh toán COD thành công ngay lập tức
+        payment.setVnpTxRef(null);
+        payment.setVnpTransactionId(null);
+        payment.setVnpTransactionNo(null);
+
+        Payment savedPayment = paymentRepository.save(payment);
+        logger.info("✅ Thanh toán COD đã tạo: TransactionId = {}, Amount = {}, Status = {}",
+                savedPayment.getTransactionId(), savedPayment.getAmount(), savedPayment.getPaymentStatus());
+
+        // Cập nhật trạng thái đơn hàng thành COD_CONFIRMED thay vì PAID
+        order.setStatus("COD_CONFIRMED");
+        orderRepository.save(order);
+        logger.info("✅ Đơn hàng cập nhật trạng thái COD_CONFIRMED: OrderId = {}", order.getId());
+
+        return savedPayment;
     }
 }

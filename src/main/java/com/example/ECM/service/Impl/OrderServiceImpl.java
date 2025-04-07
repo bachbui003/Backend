@@ -56,7 +56,7 @@ public class OrderServiceImpl implements OrderService {
         // Tạo đơn hàng mới
         Order newOrder = new Order();
         newOrder.setUser(cart.getUser());
-        newOrder.setOrderDate(LocalDateTime.now()); // Thiết lập orderDate
+        newOrder.setOrderDate(LocalDateTime.now());
         newOrder.setStatus(OrderStatus.PENDING.name());
 
         List<OrderItem> orderItems = new ArrayList<>();
@@ -65,7 +65,7 @@ public class OrderServiceImpl implements OrderService {
         for (CartItem cartItem : selectedCartItems) {
             Product product = cartItem.getProduct();
             if (product.getStockQuantity() < cartItem.getQuantity()) {
-                throw new RuntimeException("Sản phẩm " + product.getName() + " không đủ hàng!");
+                throw new RuntimeException("Sản phẩmđơn hàng không đủ hàng!");
             }
 
             OrderItem orderItem = new OrderItem();
@@ -73,6 +73,7 @@ public class OrderServiceImpl implements OrderService {
             orderItem.setProduct(product);
             orderItem.setQuantity(cartItem.getQuantity());
             orderItem.setPrice(BigDecimal.valueOf(product.getPrice()).multiply(BigDecimal.valueOf(cartItem.getQuantity())));
+            orderItem.setImageUrl(product.getImageUrl()); // Thêm imageUrl từ Product
             orderItems.add(orderItem);
             totalPrice = totalPrice.add(orderItem.getPrice());
 

@@ -11,4 +11,5 @@ public interface PaymentService {
     void updatePaymentStatus(PaymentDTO paymentDTO);
     Payment getPaymentByTransactionId(String transactionId);
     void savePayment(Payment payment);
+    Payment createCODPayment(Order order); // Thêm phương thức mới
 }

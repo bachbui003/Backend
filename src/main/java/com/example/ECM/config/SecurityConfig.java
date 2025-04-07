@@ -79,6 +79,7 @@ public class SecurityConfig {
                         // ✅ Cho phép USER & ADMIN truy cập API đặt hàng
                         .requestMatchers("/api/orders/**").hasAnyRole("USER", "ADMIN")
                         .requestMatchers("/api/v1/payments/vnpay-payment").permitAll()
+                        .requestMatchers("/api/payment/vnpay-return").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
