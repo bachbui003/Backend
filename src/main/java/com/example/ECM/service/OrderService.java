@@ -5,6 +5,7 @@ import com.example.ECM.model.Order;
 import java.util.List;
 
 public interface OrderService {
+    Order cancelOrder(Long orderId); // Thêm khai báo phương thức hủy đơn hàng
     Order createOrder(Long userId, List<Long> selectedCartItemIds); // Cập nhật để đặt hàng với sản phẩm được chọn
     Order getOrderById(Long id);
     List<Order> getOrdersByUserId(Long userId);

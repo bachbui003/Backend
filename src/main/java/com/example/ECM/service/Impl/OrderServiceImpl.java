@@ -8,7 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime; // Thêm import cho LocalDateTime
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
@@ -65,7 +65,7 @@ public class OrderServiceImpl implements OrderService {
         for (CartItem cartItem : selectedCartItems) {
             Product product = cartItem.getProduct();
             if (product.getStockQuantity() < cartItem.getQuantity()) {
-                throw new RuntimeException("Sản phẩmđơn hàng không đủ hàng!");
+                throw new RuntimeException("Sản phẩm không đủ hàng!");
             }
 
             OrderItem orderItem = new OrderItem();
@@ -73,7 +73,7 @@ public class OrderServiceImpl implements OrderService {
             orderItem.setProduct(product);
             orderItem.setQuantity(cartItem.getQuantity());
             orderItem.setPrice(BigDecimal.valueOf(product.getPrice()).multiply(BigDecimal.valueOf(cartItem.getQuantity())));
-            orderItem.setImageUrl(product.getImageUrl()); // Thêm imageUrl từ Product
+            orderItem.setImageUrl(product.getImageUrl());
             orderItems.add(orderItem);
             totalPrice = totalPrice.add(orderItem.getPrice());
 
@@ -144,5 +144,35 @@ public class OrderServiceImpl implements OrderService {
             throw new RuntimeException("Không tìm thấy đơn hàng");
         }
         orderRepository.deleteById(id);
+    }
+
+    @Override
+    public Order cancelOrder(Long orderId) {
+        logger.info("Bắt đầu hủy đơn hàng với orderId: " + orderId);
+
+        // Tìm đơn hàng
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng"));
+
+        // Kiểm tra trạng thái đơn hàng
+        if (!order.getStatus().equals(OrderStatus.PENDING.name())) {
+            throw new RuntimeException("Chỉ có thể hủy đơn hàng đang ở trạng thái PENDING");
+        }
+
+        // Cập nhật trạng thái thành CANCELLED
+        order.setStatus(OrderStatus.CANCELED.name());
+
+        // Khôi phục số lượng tồn kho cho từng sản phẩm trong đơn hàng
+        for (OrderItem orderItem : order.getOrderItems()) {
+            Product product = orderItem.getProduct();
+            product.setStockQuantity(product.getStockQuantity() + orderItem.getQuantity());
+            productRepository.save(product);
+            logger.info("Đã khôi phục " + orderItem.getQuantity() + " sản phẩm " + product.getId() + " vào kho.");
+        }
+
+        // Lưu đơn hàng đã hủy
+        Order cancelledOrder = orderRepository.save(order);
+        logger.info("Đã hủy đơn hàng #" + orderId + " thành công.");
+        return cancelledOrder;
     }
 }

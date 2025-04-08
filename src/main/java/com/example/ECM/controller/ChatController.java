@@ -1,5 +1,6 @@
 package com.example.ECM.controller;
 
+import com.example.ECM.model.ChatMessage;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
@@ -14,8 +15,8 @@ public class ChatController {
     }
 
     @MessageMapping("/sendMessage")
-    public void sendMessage(String message) {
-        // Gửi tin nhắn đến tất cả các clients đang kết nối
+    public void sendMessage(ChatMessage message) {
+        // Gửi tin nhắn đến tất cả các client đang kết nối
         messagingTemplate.convertAndSend("/topic/messages", message);
     }
 }

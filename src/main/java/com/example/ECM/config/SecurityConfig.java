@@ -48,7 +48,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:4200")); // Cho phép Angular call API
+        configuration.setAllowedOrigins(List.of("http://localhost:4200"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
@@ -62,8 +62,9 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
                 .csrf(csrf -> csrf.disable())
-
+                .cors(cors -> cors.configurationSource(corsConfigurationSource())) // Kích hoạt CORS
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/chat/**").permitAll() // Cho phép truy cập /chat mà không cần xác thực
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/categories").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
@@ -76,10 +77,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/cart/add").authenticated()
                         .requestMatchers("/api/cart/all").hasRole("ADMIN")
                         .requestMatchers("/api/v1/payments/submitOrder").hasAnyRole("USER", "ADMIN")
-                        // ✅ Cho phép USER & ADMIN truy cập API đặt hàng
                         .requestMatchers("/api/orders/**").hasAnyRole("USER", "ADMIN")
                         .requestMatchers("/api/v1/payments/vnpay-payment").permitAll()
                         .requestMatchers("/api/payment/vnpay-return").permitAll()
+                        .requestMatchers("/api/orders/{orderId}/cancel").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -87,6 +88,4 @@ public class SecurityConfig {
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
-
-
 }

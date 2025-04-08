@@ -125,6 +125,16 @@ public class OrderController {
             return ResponseEntity.badRequest().body("Lỗi: " + e.getMessage());
         }
     }
+    // 🚫 API hủy đơn hàng
+    @PutMapping("/{orderId}/cancel")
+    public ResponseEntity<?> cancelOrder(@PathVariable Long orderId) {
+        try {
+            Order cancelledOrder = orderService.cancelOrder(orderId);
+            return ResponseEntity.ok(cancelledOrder);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
 
     private OrderResponseDTO convertToDTO(Order order) {
         if (order == null) {
