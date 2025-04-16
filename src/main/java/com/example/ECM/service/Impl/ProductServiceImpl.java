@@ -44,6 +44,8 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public ProductDTO createProduct(ProductDTO productDTO) {
+        if (productDTO.getPrice() < 0) {
+            throw new RuntimeException("Giá sản phẩm không thể là số âm");}
         Category category = categoryRepository.findById(productDTO.getCategoryId())
                 .orElseThrow(() -> new RuntimeException("Danh mục không tồn tại"));
 
@@ -61,6 +63,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public Optional<ProductDTO> updateProduct(Long id, ProductDTO productDTO) {
+        //<optional>.Map(biến)
         return productRepository.findById(id).map(existingProduct -> {
             existingProduct.setStockQuantity(productDTO.getStockQuantity() != null ? productDTO.getStockQuantity() : 0);
             existingProduct.setName(productDTO.getName());

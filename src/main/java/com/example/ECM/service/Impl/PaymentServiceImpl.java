@@ -198,10 +198,10 @@ public class PaymentServiceImpl implements PaymentService {
     //COD
     @Transactional
     public Payment createCODPayment(Order order) {
-        logger.info("📢 Bắt đầu tạo thanh toán COD cho đơn hàng: OrderId = {}", order.getId());
+        logger.info("Bắt đầu tạo thanh toán COD cho đơn hàng: OrderId = {}", order.getId());
 
         Optional<Payment> existingPayment = paymentRepository.findByOrder(order);
-        if (existingPayment.isPresent() && existingPayment.get().getPaymentStatus() == PaymentStatus.SUCCESS) {
+        if (existingPayment.isPresent() && existingPayment.get().getPaymentStatus() == PaymentStatus.COD) {
             throw new RuntimeException("Đơn hàng đã được thanh toán. Không thể tạo thanh toán COD.");
         }
 
@@ -211,19 +211,19 @@ public class PaymentServiceImpl implements PaymentService {
         payment.setAmount(order.getTotalPrice());
         payment.setTransactionId("COD_" + order.getId() + "_" + System.currentTimeMillis());
         payment.setPaymentDate(LocalDateTime.now());
-        payment.setPaymentStatus(PaymentStatus.SUCCESS); // Thanh toán COD thành công ngay lập tức
+        payment.setPaymentStatus(PaymentStatus.COD); // Thanh toán COD
         payment.setVnpTxRef(null);
         payment.setVnpTransactionId(null);
         payment.setVnpTransactionNo(null);
 
         Payment savedPayment = paymentRepository.save(payment);
-        logger.info("✅ Thanh toán COD đã tạo: TransactionId = {}, Amount = {}, Status = {}",
+        logger.info("Thanh toán COD đã tạo: TransactionId = {}, Amount = {}, Status = {}",
                 savedPayment.getTransactionId(), savedPayment.getAmount(), savedPayment.getPaymentStatus());
 
         // Cập nhật trạng thái đơn hàng thành COD_CONFIRMED thay vì PAID
         order.setStatus("COD_CONFIRMED");
         orderRepository.save(order);
-        logger.info("✅ Đơn hàng cập nhật trạng thái COD_CONFIRMED: OrderId = {}", order.getId());
+        logger.info("Đơn hàng cập nhật trạng thái COD_CONFIRMED: OrderId = {}", order.getId());
 
         return savedPayment;
     }

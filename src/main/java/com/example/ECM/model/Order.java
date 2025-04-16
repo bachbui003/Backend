@@ -15,8 +15,9 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @ToString(exclude = "orderItems") // Tránh vòng lặp khi log
-@JsonIgnoreProperties({"orderItems"}) // Tránh vòng lặp khi serialize JSON
+@JsonIgnoreProperties({"orderItems", "payments"}) // Tránh vòng lặp khi serialize JSON
 public class Order {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -27,12 +28,18 @@ public class Order {
 
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss'Z'")
     @Column(name = "order_date")
-    private LocalDateTime orderDate; // Thêm trường orderDate
-
+    private LocalDateTime orderDate;
 
     private BigDecimal totalPrice;
     private String status;
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItem> orderItems;
+
+    // Thêm cascade delete cho Payments
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Payment> payments;  // Giả sử Order có thể có nhiều Payment
+
+
+
 }

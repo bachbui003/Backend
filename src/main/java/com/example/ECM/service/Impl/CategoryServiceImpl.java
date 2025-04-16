@@ -60,15 +60,21 @@ public class CategoryServiceImpl implements CategoryService {
 
     @Override
     public Optional<List<ProductDTO>> getProductsByCategory(Long id) {
-        // Lấy danh sách sản phẩm thuộc danh mục
+        // Kiểm tra danh mục có tồn tại không
+        boolean categoryExists = categoryRepository.existsById(id);
+        if (!categoryExists) {
+            return Optional.empty(); // Trả về Optional.empty nếu không tồn tại danh mục
+        }
+
+        // Lấy danh sách sản phẩm
         List<Product> products = productRepository.findByCategoryId(id);
-        // Chuyển đổi sản phẩm thành ProductDTO
         List<ProductDTO> productDTOs = products.stream()
                 .map(this::convertToProductDTO)
                 .collect(Collectors.toList());
-        return Optional.ofNullable(productDTOs.isEmpty() ? null : productDTOs);
-    }
 
+        // Trả về cả khi danh sách trống
+        return Optional.of(productDTOs);
+    }
     private CategoryDTO convertToDTO(Category category) {
         return CategoryDTO.builder()
                 .id(category.getId())

@@ -14,5 +14,4 @@ public interface ProductService {
     Optional<ProductDTO> updateStock(Long id, int quantity);
     void deleteProduct(Long id);
     List<ProductDTO> getAllProducts();
-
 }

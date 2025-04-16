@@ -17,7 +17,7 @@ public class VNPayService {
     public String createOrder(int total, String orderInfor, String urlReturn, String txnRef) {
         String vnp_Version = "2.1.0";
         String vnp_Command = "pay";
-        String vnp_TxnRef = txnRef; // Sử dụng transactionId từ PaymentController thay vì tạo ngẫu nhiên
+        String vnp_TxnRef = txnRef;
         String vnp_IpAddr = "127.0.0.1";
         String vnp_TmnCode = VNPayConfig.vnp_TmnCode;
         String orderType = "other";

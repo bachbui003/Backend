@@ -147,6 +147,7 @@ public ResponseEntity<?> getAllCarts() {
     }
 
     // Xóa toàn bộ giỏ hàng của user
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/clear/{userId}")
     public ResponseEntity<?> clearCart(@PathVariable Long userId) {
         try {

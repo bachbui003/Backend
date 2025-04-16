@@ -16,7 +16,7 @@ public class JwtUtil {
 
     private final Key key = Keys.hmacShaKeyFor(SECRET_KEY.getBytes());
 
-    // 🔹 Tạo token chứa thêm userId, role, phone, address, email, fullName
+    // 🔹 Tạo token
     public String generateToken(String username, Long userId, String role, String phone, String address, String email, String fullName) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId); // Thêm userId vào payload

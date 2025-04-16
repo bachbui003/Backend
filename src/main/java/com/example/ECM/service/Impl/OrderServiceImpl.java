@@ -1,17 +1,21 @@
 package com.example.ECM.service.Impl;
 
+import com.example.ECM.dto.MonthlyRevenueDTO;
+import com.example.ECM.dto.TopProductDTO;
 import com.example.ECM.model.*;
 import com.example.ECM.repository.*;
 import com.example.ECM.service.OrderService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -35,6 +39,8 @@ public class OrderServiceImpl implements OrderService {
         this.orderItemRepository = orderItemRepository;
         this.productRepository = productRepository;
     }
+
+    // Các phương thức CRUD đơn hàng
 
     @Override
     public Order createOrder(Long userId, List<Long> selectedCartItemIds) {
@@ -117,29 +123,36 @@ public class OrderServiceImpl implements OrderService {
     @Override
     public Order updateOrder(Long id, Order updatedOrder) {
         return orderRepository.findById(id).map(order -> {
-            if (updatedOrder.getOrderItems() == null || updatedOrder.getOrderItems().isEmpty()) {
+            // Update status if provided
+            if (updatedOrder.getStatus() != null) {
+                order.setStatus(updatedOrder.getStatus());
+            }
+
+            // Update order items if provided and not empty
+            if (updatedOrder.getOrderItems() != null && !updatedOrder.getOrderItems().isEmpty()) {
+                if (updatedOrder.getOrderItems().stream().anyMatch(item -> item.getProduct() == null || item.getProduct().getId() == null)) {
+                    throw new RuntimeException("Sản phẩm trong đơn hàng không hợp lệ");
+                }
+
+                order.getOrderItems().clear();
+                for (OrderItem item : updatedOrder.getOrderItems()) {
+                    // Verify product existence
+                    Product product = productRepository.findById(item.getProduct().getId())
+                            .orElseThrow(() -> new RuntimeException("Sản phẩm không tồn tại"));
+
+                    item.setOrder(order);
+                    order.getOrderItems().add(item);
+                }
+            } else if (updatedOrder.getOrderItems() != null && updatedOrder.getOrderItems().isEmpty()) {
                 throw new RuntimeException("Danh sách sản phẩm không hợp lệ");
             }
-            order.setStatus(updatedOrder.getStatus());
-            order.getOrderItems().clear();
-            for (OrderItem item : updatedOrder.getOrderItems()) {
-                item.setOrder(order);
-                order.getOrderItems().add(item);
-            }
+
             return orderRepository.save(order);
         }).orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng"));
     }
-
-    @Override
-    public Order updateOrderStatus(Long orderId, String status) {
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng"));
-        order.setStatus(status);
-        return orderRepository.save(order);
-    }
-
     @Override
     public void deleteOrder(Long id) {
+
         if (!orderRepository.existsById(id)) {
             throw new RuntimeException("Không tìm thấy đơn hàng");
         }
@@ -174,5 +187,85 @@ public class OrderServiceImpl implements OrderService {
         Order cancelledOrder = orderRepository.save(order);
         logger.info("Đã hủy đơn hàng #" + orderId + " thành công.");
         return cancelledOrder;
+    }
+
+    @Override
+    public MonthlyRevenueDTO getMonthlyRevenueWithOrdersStats(int month) {
+        // Lấy doanh thu tháng
+        List<Object[]> revenueStats = orderRepository.getMonthlyRevenue();
+        BigDecimal totalRevenue = BigDecimal.ZERO;
+        for (Object[] stat : revenueStats) {
+            Integer monthFromQuery = (Integer) stat[0]; // Lấy tháng từ query
+            if (monthFromQuery == month) {
+                totalRevenue = (BigDecimal) stat[1]; // Lấy tổng doanh thu cho tháng
+                break;
+            }
+        }
+
+        // Lấy danh sách đơn hàng của tháng
+        List<Order> orders = orderRepository.findOrdersByMonth(month);
+
+        // Trả về đối tượng MonthlyRevenueDTO
+        return new MonthlyRevenueDTO(month, totalRevenue, orders);
+    }
+
+
+    @Override
+    public Map<String, Object> getTopSellingProducts() {
+        Pageable pageable = PageRequest.of(0, 10);
+        List<TopProductDTO> topProducts = orderRepository.findTop5BestSellingProducts(pageable);
+
+        double totalRevenue = topProducts.stream()
+                .mapToDouble(TopProductDTO::getRevenue)
+                .sum();
+
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("topSellingProducts", topProducts);
+        stats.put("totalRevenue", totalRevenue);
+
+        return stats;
+    }
+
+
+    @Override
+    public MonthlyRevenueDTO getRevenueBetweenDates(LocalDateTime startDate, LocalDateTime endDate) {
+        // Lấy tổng doanh thu trong khoảng thời gian
+        BigDecimal totalRevenue = orderRepository.calculateRevenueBetweenDates(startDate, endDate)
+                .orElse(BigDecimal.ZERO);
+
+        // Lấy danh sách đơn hàng trong khoảng thời gian
+        List<Order> orders = orderRepository.findOrdersBetweenDates(startDate, endDate);
+
+        // Trả về DTO (có thể đặt lại tên DTO nếu không phù hợp với "Monthly")
+        return new MonthlyRevenueDTO(0, totalRevenue, orders); // 0 nếu không cần "month"
+    }
+
+
+    // Phương thức lấy thống kê số lượng đơn hàng theo trạng thái
+    @Override
+    public Map<String, Object> getOrderStatusStats() {
+        List<Order> allOrders = orderRepository.findAll();
+
+        int pendingOrders = 0;
+        int completedOrders = 0;
+        int canceledOrders = 0;
+        int CODOrders = 0;
+
+        for (Order order : allOrders) {
+            switch (order.getStatus()) {
+                case "PENDING" -> pendingOrders++;
+                case "PAID" -> completedOrders++;
+                case "CANCELED" -> canceledOrders++;
+                case "COD_CONFIRMED" -> CODOrders++;
+            }
+        }
+
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("pendingOrders", pendingOrders);
+        stats.put("completedOrders", completedOrders);
+        stats.put("canceledOrders", canceledOrders);
+        stats.put("CODOrders", CODOrders);
+
+        return stats;
     }
 }
