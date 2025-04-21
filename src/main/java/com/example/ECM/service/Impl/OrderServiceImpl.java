@@ -213,7 +213,7 @@ public class OrderServiceImpl implements OrderService {
     @Override
     public Map<String, Object> getTopSellingProducts() {
         Pageable pageable = PageRequest.of(0, 10);
-        List<TopProductDTO> topProducts = orderRepository.findTop5BestSellingProducts(pageable);
+        List<TopProductDTO> topProducts = orderRepository.findTop10BestSellingProducts(pageable);
 
         double totalRevenue = topProducts.stream()
                 .mapToDouble(TopProductDTO::getRevenue)
@@ -226,20 +226,17 @@ public class OrderServiceImpl implements OrderService {
         return stats;
     }
 
-
     @Override
     public MonthlyRevenueDTO getRevenueBetweenDates(LocalDateTime startDate, LocalDateTime endDate) {
-        // Lấy tổng doanh thu trong khoảng thời gian
         BigDecimal totalRevenue = orderRepository.calculateRevenueBetweenDates(startDate, endDate)
                 .orElse(BigDecimal.ZERO);
 
-        // Lấy danh sách đơn hàng trong khoảng thời gian
         List<Order> orders = orderRepository.findOrdersBetweenDates(startDate, endDate);
 
-        // Trả về DTO (có thể đặt lại tên DTO nếu không phù hợp với "Monthly")
-        return new MonthlyRevenueDTO(0, totalRevenue, orders); // 0 nếu không cần "month"
+        // Trả về DTO với tháng được xác định từ startDate (nếu cần)
+        int month = startDate.getMonthValue();
+        return new MonthlyRevenueDTO(month, totalRevenue, orders);
     }
-
 
     // Phương thức lấy thống kê số lượng đơn hàng theo trạng thái
     @Override
@@ -250,6 +247,9 @@ public class OrderServiceImpl implements OrderService {
         int completedOrders = 0;
         int canceledOrders = 0;
         int CODOrders = 0;
+        int DeliveredOrders = 0;
+        int FailedOrders = 0;
+        int ShippedOrders = 0;
 
         for (Order order : allOrders) {
             switch (order.getStatus()) {
@@ -257,6 +257,9 @@ public class OrderServiceImpl implements OrderService {
                 case "PAID" -> completedOrders++;
                 case "CANCELED" -> canceledOrders++;
                 case "COD_CONFIRMED" -> CODOrders++;
+                case "DELIVERED" -> DeliveredOrders++;
+                case "FAILED" -> FailedOrders++;
+                case "SHIPPED" -> ShippedOrders++;
             }
         }
 
@@ -265,6 +268,10 @@ public class OrderServiceImpl implements OrderService {
         stats.put("completedOrders", completedOrders);
         stats.put("canceledOrders", canceledOrders);
         stats.put("CODOrders", CODOrders);
+        stats.put("deliveredOrders", DeliveredOrders);
+        stats.put("failedOrders", FailedOrders);
+        stats.put("shippedOrders", ShippedOrders);
+
 
         return stats;
     }

@@ -34,13 +34,13 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             "FROM OrderItem oi JOIN oi.product p " +
             "GROUP BY p.name, p.price " +
             "ORDER BY SUM(oi.quantity) DESC")
-    List<TopProductDTO> findTop5BestSellingProducts(Pageable pageable);
+    List<TopProductDTO> findTop10BestSellingProducts(Pageable pageable);
 
-    @Query("SELECT SUM(o.totalPrice) FROM Order o WHERE o.orderDate BETWEEN :startDate AND :endDate")
+    @Query("SELECT SUM(o.totalPrice) FROM Order o WHERE o.orderDate BETWEEN :startDate AND :endDate AND o.status NOT IN ('PENDING', 'CANCELED')")
     Optional<BigDecimal> calculateRevenueBetweenDates(@Param("startDate") LocalDateTime startDate,
                                                       @Param("endDate") LocalDateTime endDate);
 
-    @Query("SELECT o FROM Order o WHERE o.orderDate BETWEEN :startDate AND :endDate")
+    @Query("SELECT o FROM Order o WHERE o.orderDate BETWEEN :startDate AND :endDate AND o.status NOT IN ('PENDING', 'CANCELED')")
     List<Order> findOrdersBetweenDates(@Param("startDate") LocalDateTime startDate,
                                        @Param("endDate") LocalDateTime endDate);
 
