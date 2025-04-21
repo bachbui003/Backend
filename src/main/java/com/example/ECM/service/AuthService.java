@@ -82,6 +82,9 @@ public class AuthService {
         String subject = "Đăng ký tài khoản thành công";
         String content = "Xin chào " + user.getFullName() + ",\n\n"
                 + "Bạn đã đăng ký tài khoản thành công trên hệ thống của chúng tôi.\n"
+                + "Dưới đây là thông tin đăng nhập của bạn:\n"
+                + "- Tên đăng nhập: " + user.getUsername() + "\n"
+                + "- Mật khẩu: " + request.getPassword() + "\n\n"
                 + "Chúc bạn trải nghiệm mua sắm vui vẻ!\n\n"
                 + "Trân trọng,\nĐội ngũ hỗ trợ ECM.";
         emailService.sendEmail(user.getEmail(), subject, content);
